@@ -112,6 +112,21 @@
   </a>
 </div>
 
+  <!-- ---------- FILM POP-UP ----------
+       Clicking a carousel card flies that card into the centre and plays the
+       full film (with sound) on it. Lives outside .stage so nothing clips it. -->
+  <div class="modal" id="modal" role="dialog" aria-modal="true" aria-hidden="true"
+    aria-label="播放影片">
+    <div class="mback" data-close></div>
+    <div class="mbox" id="mbox">
+      <button class="mclose" id="mclose" type="button" aria-label="关闭">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"
+          fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <video id="mvideo" playsinline preload="none" aria-label="弹出的影片"></video>
+    </div>
+  </div>
+
   <!-- ---------- THE REEL — scroll down ---------- -->
   <section class="reel" aria-label="Films">
     <div class="reel-inner">

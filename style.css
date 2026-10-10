@@ -205,9 +205,64 @@ a{text-decoration:none;color:inherit}                          /* button labels 
 .reel-cap{margin-bottom:15px}
 .reel-name{display:inline-block;font-size:14px;font-weight:500;letter-spacing:.03em;
   color:rgba(255,255,255,.86)}
-.reel-video{display:block;width:100%;aspect-ratio:16/9;border-radius:14px;
-  background:#0b0e13;object-fit:cover;cursor:pointer;
+
+/* ==================================================================
+   9c. THE PLAYER — one control bar drives the reel films and the pop-up:
+   play/pause, elapsed + duration, a draggable progress bar, mute and volume.
+   ================================================================== */
+.player{position:relative;border-radius:14px;overflow:hidden;background:#0b0e13;
   box-shadow:0 30px 70px rgba(0,0,0,.62),0 4px 14px rgba(0,0,0,.5)}
+.player video{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;
+  background:#000;cursor:pointer}
+.pctl{display:flex;align-items:center;gap:12px;padding:9px 14px;
+  background:linear-gradient(180deg,#0e1319,#0a0e14);
+  border-top:1px solid rgba(255,255,255,.07)}
+.pbtn{flex:0 0 auto;display:grid;place-items:center;width:30px;height:30px;padding:0;
+  border:0;border-radius:50%;background:rgba(255,255,255,.08);color:#fff;cursor:pointer;
+  transition:background .2s,transform .2s}
+.pbtn:hover{background:rgba(255,255,255,.17)}
+.pbtn:active{transform:scale(.93)}
+.pbtn:focus-visible{outline:2px solid rgba(120,225,255,.7);outline-offset:2px}
+.pbtn svg{display:block;width:15px;height:15px}
+.ptime{flex:0 0 auto;font-size:11.5px;color:rgba(255,255,255,.6);
+  font-variant-numeric:tabular-nums}
+.pbar,.pvol{position:relative;height:14px;cursor:pointer}
+.pbar{flex:1 1 auto}
+.pvol{flex:0 0 auto;width:56px}
+.pbar::before,.pvol::before{content:"";position:absolute;left:0;right:0;top:6px;height:3px;
+  border-radius:2px;background:rgba(255,255,255,.16)}
+.pfill{position:absolute;left:0;top:6px;height:3px;border-radius:2px;background:#35d8ff;
+  pointer-events:none}
+.pvolfill{position:absolute;left:0;top:6px;height:3px;border-radius:2px;
+  background:rgba(255,255,255,.62);pointer-events:none}
+.pknob{position:absolute;top:7.5px;width:10px;height:10px;margin:-5px 0 0 -5px;
+  border-radius:50%;background:#fff;pointer-events:none;opacity:0;transition:opacity .18s}
+.pbar:hover .pknob,.pvol:hover .pknob{opacity:1}
+
+/* ---------- the film pop-up ---------- */
+.modal{position:fixed;inset:0;z-index:700;display:none;align-items:center;
+  justify-content:center;padding:3vh 4vw}
+.modal.on{display:flex}
+.mback{position:absolute;inset:0;background:rgba(2,2,4,.82);
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+  opacity:0;transition:opacity .34s ease}
+.modal.on .mback{opacity:1}
+.mbox{position:relative;width:min(1040px,92vw);will-change:transform,opacity}
+.mbox .player{box-shadow:0 40px 100px rgba(0,0,0,.78),0 6px 20px rgba(0,0,0,.6)}
+.mclose{position:absolute;right:0;bottom:calc(100% + 12px);display:grid;place-items:center;
+  width:34px;height:34px;padding:0;border:0;border-radius:50%;
+  background:rgba(255,255,255,.1);color:#fff;cursor:pointer;transition:background .2s}
+.mclose:hover{background:rgba(255,255,255,.22)}
+.mclose svg{width:15px;height:15px}
+body.noscroll{overflow:hidden}
+@media (prefers-reduced-motion:reduce){ .mback{transition:none} }
+
+@media (max-width:700px){
+  .pctl{gap:9px;padding:8px 10px}
+  .ptime{font-size:10.5px}
+  .pvol{width:44px}
+  .mclose{bottom:calc(100% + 8px)}
+}
 
 /* FLOATING WHATSAPP BUTTON — fixed, so it rides along while the page scrolls */
 .wa{position:fixed;right:16px;bottom:24px;width:56px;height:56px;border-radius:50%;
@@ -316,7 +371,7 @@ a{text-decoration:none;color:inherit}                          /* button labels 
   .reel{padding:9vh 20px 13vh}
   .reel-item{margin-bottom:8vh}
   .reel-name{font-size:13px}
-  .reel-video{border-radius:12px}
+  .player{border-radius:12px}
   .wa{width:54px;height:54px;right:14px;bottom:16px}
   .wa svg{width:29px;height:29px}
 }

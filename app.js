@@ -71,7 +71,9 @@ for(i=0;i<N;i++){
     var v=el.querySelector('video');
     el._v=v;
     el._vis=null;        /* null = not yet classified; placeCards() then owns both edges */
+    el._film=i % CLIPS.length;
     v.addEventListener('error', function(){ el.classList.add('broken'); });
+    el.addEventListener('click', function(){ openFilm(el._film, el); });
   })(card);
   ring.appendChild(card);
   cards.push(card);
@@ -86,6 +88,7 @@ var reduce=!!(reduceMQ && reduceMQ.matches);
 function movieOn(){ return !reduce && !document.hidden; }
 function playCard(el){
   if(!el._v || !movieOn()) return;
+  if(modalOpen) return;                          /* the pop-up owns the screen */
   var p=el._v.play();
   if(p && p.catch) p.catch(function(){});
 }
@@ -115,7 +118,7 @@ function tick(t){
   if(last==null) last=t;                        /* also guarantees no jump on tab refocus */
   var dt=Math.min((t-last)/1000, .1);
   last=t;
-  if(!reduce) phase-=SPEED*dt;
+  if(!reduce && !modalOpen) phase-=SPEED*dt;    /* the wheel holds still under the pop-up */
   placeCards();
   requestAnimationFrame(tick);
 }
@@ -385,6 +388,242 @@ if(bandMQ){
    prefers-reduced-motion nothing auto-plays — the poster frame stands in.
    ================================================================== */
 var reelVids=[].slice.call(document.querySelectorAll('.reel-video'));
+
+/* ==================================================================
+   9c. SOUND + THE PLAYER
+   The carousel clips are silent loops, so a click doesn't un-mute them — it
+   flies the card into the middle and plays the FULL film (which has its audio
+   track) with the same control bar the reel films use.
+   ================================================================== */
+var FILMS=[
+  {src:'web/杰威尔.mp4',     poster:'web/杰威尔.jpg',     at:7.5},
+  {src:'web/朗朗宣传片.mp4', poster:'web/朗朗宣传片.jpg', at:28.4},
+  {src:'web/音效完成版.mp4', poster:'web/音效完成版.jpg', at:27.2},
+  {src:'web/AFU.mp4',        poster:'web/AFU.jpg',        at:11.7}
+];
+
+var ICO={
+  play:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.2v13.6L19 12z" fill="currentColor"/></svg>',
+  pause:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z" fill="currentColor"/></svg>',
+  vol:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.2h3.2L12 5.4v13.2L7.2 14.8H4z" fill="currentColor"/><path d="M15.4 8.6a4.8 4.8 0 0 1 0 6.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+  mute:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.2h3.2L12 5.4v13.2L7.2 14.8H4z" fill="currentColor"/><path d="M15.6 9.4l4.6 5.2m0-5.2l-4.6 5.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>'
+};
+
+function fmtTime(t){
+  if(!isFinite(t) || t<0) t=0;
+  t=Math.floor(t);
+  var m=Math.floor(t/60), s=t%60;
+  return m+':'+(s<10?'0':'')+s;
+}
+
+var players=[];                                  /* every player we build */
+function focusSound(v){                          /* only one film may be audible */
+  for(var i=0;i<players.length;i++){
+    var o=players[i];
+    if(o.video!==v && !o.video.muted){ o.video.muted=true; o.paintVol(); }
+  }
+}
+
+function buildPlayer(video){
+  if(video._ui) return video._ui;
+  var player=document.createElement('div');
+  player.className='player';
+  video.parentNode.insertBefore(player, video);
+  player.appendChild(video);
+
+  var bar=document.createElement('div');
+  bar.className='pctl';
+  bar.innerHTML=
+    '<button class="pbtn pplay" type="button" aria-label="播放 / 暂停">'+ICO.play+'</button>'+
+    '<span class="ptime pcur">0:00</span>'+
+    '<div class="pbar" role="slider" aria-label="播放进度" tabindex="0"><div class="pfill"></div><span class="pknob"></span></div>'+
+    '<span class="ptime pdur">0:00</span>'+
+    '<button class="pbtn pmute" type="button" aria-label="声音开关">'+ICO.mute+'</button>'+
+    '<div class="pvol" role="slider" aria-label="音量" tabindex="0"><div class="pvolfill"></div><span class="pknob"></span></div>';
+  player.appendChild(bar);
+
+  var btnPlay=bar.querySelector('.pplay'), btnMute=bar.querySelector('.pmute');
+  var cur=bar.querySelector('.pcur'), dur=bar.querySelector('.pdur');
+  var pbar=bar.querySelector('.pbar'), pfill=bar.querySelector('.pfill');
+  var vol=bar.querySelector('.pvol'), vfill=bar.querySelector('.pvolfill');
+
+  function paintTime(){
+    var d=video.duration||0, t=video.currentTime||0;
+    pfill.style.width=(d? (t/d*100) : 0)+'%';
+    cur.textContent=fmtTime(t);
+    dur.textContent=fmtTime(d);
+  }
+  function paintVol(){
+    vfill.style.width=(video.muted? 0 : video.volume*100)+'%';
+    btnMute.innerHTML=(video.muted || !video.volume)? ICO.mute : ICO.vol;
+  }
+  function paintPlay(){ btnPlay.innerHTML=video.paused? ICO.play : ICO.pause; }
+
+  btnPlay.addEventListener('click', function(){
+    if(video.paused){ var p=video.play(); if(p&&p.catch) p.catch(function(){}); }
+    else video.pause();
+  });
+  btnMute.addEventListener('click', function(){
+    video.muted=!video.muted;
+    if(!video.muted){ if(!video.volume) video.volume=.8; focusSound(video); }
+    paintVol();
+  });
+
+  function ratioFrom(e, el){
+    var r=el.getBoundingClientRect();
+    var x=(e.touches? e.touches[0].clientX : e.clientX) - r.left;
+    return Math.min(1, Math.max(0, x/r.width));
+  }
+  function seekAt(e){
+    if(video.duration) video.currentTime=ratioFrom(e, pbar)*video.duration;
+    paintTime();
+  }
+  function volAt(e){
+    var p=ratioFrom(e, vol);
+    video.volume=p;
+    video.muted=(p===0);
+    if(!video.muted) focusSound(video);
+    paintVol();
+  }
+  function draggable(el, fn){
+    el.addEventListener('pointerdown', function(e){
+      e.preventDefault();
+      try{ if(el.setPointerCapture) el.setPointerCapture(e.pointerId); }catch(err){}
+      fn(e);
+      var move=function(ev){ fn(ev); };
+      var up=function(){ el.removeEventListener('pointermove',move); el.removeEventListener('pointerup',up); };
+      el.addEventListener('pointermove',move);
+      el.addEventListener('pointerup',up);
+    });
+    el.addEventListener('keydown', function(e){    /* arrows work too */
+      if(e.key!=='ArrowLeft' && e.key!=='ArrowRight') return;
+      e.preventDefault();
+      var step=(e.key==='ArrowRight'? 1 : -1);
+      if(el===pbar && video.duration) video.currentTime=Math.min(video.duration, Math.max(0, video.currentTime+step*5));
+      else if(el===vol){ video.volume=Math.min(1, Math.max(0, video.volume+step*.1)); video.muted=(video.volume===0); if(!video.muted) focusSound(video); paintVol(); }
+      paintTime();
+    });
+  }
+  draggable(pbar, seekAt);
+  draggable(vol, volAt);
+
+  video.addEventListener('timeupdate', paintTime);
+  video.addEventListener('durationchange', paintTime);
+  video.addEventListener('loadedmetadata', paintTime);
+  video.addEventListener('play', paintPlay);
+  video.addEventListener('pause', paintPlay);
+  video.addEventListener('volumechange', paintVol);
+
+  var ui={video:video, paintVol:paintVol};
+  players.push(ui);
+  video._ui=ui;
+  paintTime(); paintVol(); paintPlay();
+  return ui;
+}
+
+/* ---------- the pop-up ---------- */
+var modal=document.getElementById('modal'), mbox=document.getElementById('mbox');
+var mvideo=document.getElementById('mvideo'), mclose=document.getElementById('mclose');
+var modalOpen=false, modalCard=null;
+
+function openFilm(idx, card){
+  var f=FILMS[idx];
+  if(!f || modalOpen) return;
+  modalOpen=true; modalCard=card;
+  buildPlayer(mvideo);
+
+  /* freeze the wheel so the card we flew out of stays put, and stop the
+     decorative clips from decoding behind the pop-up */
+  for(var i=0;i<cards.length;i++){ var v=cards[i]._v; if(v && !v.paused) v.pause(); }
+  for(var r=0;r<reelVids.length;r++){ if(!reelVids[r].paused) reelVids[r].pause(); }
+
+  modal.classList.add('on');
+  modal.setAttribute('aria-hidden','false');
+  document.body.classList.add('noscroll');
+  mclose.focus();
+
+  /* FLIP: place the box on the card, then let it fly to the centre */
+  mbox.style.transition='none';
+  mbox.style.transform='none';
+  mbox.style.opacity='1';
+  var fr=mbox.getBoundingClientRect();
+  if(card && !reduce){
+    var cr=card.getBoundingClientRect();
+    var s=cr.width/fr.width;
+    var dx=(cr.left+cr.width/2)-(fr.left+fr.width/2);
+    var dy=(cr.top+cr.height/2)-(fr.top+fr.height/2);
+    mbox.style.transformOrigin='50% 50%';
+    mbox.style.transform='translate('+dx+'px,'+dy+'px) scale('+s+')';
+    mbox.style.opacity='.25';
+    void mbox.offsetWidth;
+    mbox.style.transition='transform .58s cubic-bezier(.16,1,.3,1),opacity .42s ease';
+    mbox.style.transform='none';
+    mbox.style.opacity='1';
+  }
+
+  /* The film only starts loading now that the box is on screen — a hidden
+     <video> has its loading deferred, which is why it used to sit at 0:00.
+     Play first (so it starts the moment data arrives) and seek on metadata. */
+  mvideo.onloadedmetadata=function(){
+    mvideo.onloadedmetadata=null;
+    try{ mvideo.currentTime=f.at; }catch(e){}      /* land where the card was */
+  };
+  mvideo.muted=false;
+  mvideo.volume=.6;
+  mvideo._ui.paintVol();
+  focusSound(mvideo);
+  mvideo.src=f.src;
+  mvideo.load();
+  var pr=mvideo.play();
+  if(pr && pr.catch) pr.catch(function(){          /* autoplay refused -> mute and retry */
+    mvideo.muted=true;
+    mvideo._ui.paintVol();
+    var q=mvideo.play(); if(q && q.catch) q.catch(function(){});
+  });
+}
+
+function closeFilm(){
+  if(!modalOpen) return;
+  modalOpen=false;
+  if(!mvideo.paused) mvideo.pause();
+  modal.setAttribute('aria-hidden','true');
+
+  var fr=mbox.getBoundingClientRect();
+  var back=modalCard && !reduce ? modalCard.getBoundingClientRect() : null;
+  function done(){
+    modal.classList.remove('on');
+    document.body.classList.remove('noscroll');
+    mvideo.removeAttribute('src'); mvideo.load();     /* free the film */
+    mbox.style.transition='none'; mbox.style.transform='none'; mbox.style.opacity='1';
+    modalCard=null;
+    syncReel();
+  }
+  if(back){
+    var s=back.width/fr.width;
+    var dx=(back.left+back.width/2)-(fr.left+fr.width/2);
+    var dy=(back.top+back.height/2)-(fr.top+fr.height/2);
+    mbox.style.transition='transform .5s cubic-bezier(.4,0,.2,1),opacity .38s ease';
+    mbox.style.transform='translate('+dx+'px,'+dy+'px) scale('+s+')';
+    mbox.style.opacity='.2';
+    setTimeout(done, 500);
+  } else {
+    mbox.style.transition='opacity .3s ease';
+    mbox.style.opacity='0';
+    setTimeout(done, 300);
+  }
+}
+
+mclose.addEventListener('click', closeFilm);
+modal.addEventListener('click', function(e){ if(e.target.hasAttribute('data-close')) closeFilm(); });
+document.addEventListener('keydown', function(e){
+  if(e.key==='Escape'){
+    if(modalOpen) closeFilm();
+    else if(nav.classList.contains('open')){ closeMenu(); burger.focus(); }
+  }
+});
+
+/* the reel films get the very same control bar */
+reelVids.forEach(function(v){ buildPlayer(v); });
 
 /* the hero's background film: fades in once it has a frame, and obeys the same
    reduced-motion / hidden-tab rules as everything else */
