@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en-US">
+<head>
+<meta charset="utf-8">
+<title>Vision — Streamline the shop virtual</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="app.js"></script>
+</head>
+<body>
+
+<div class="stage">
+  <!-- Source: .../hf_20260622_202655_a7f5aca0-2f80-4bc9-bcb5-96ac95662003.mp4
+       Copied locally + faststart: the CDN file keeps its index at the tail, so
+       served straight from CloudFront the hero sat black for ~15s. -->
+  <!-- no autoplay attribute: playback is started by script, so a reduced-motion
+       visitor keeps the poster still instead of a frame of moving film -->
+  <video class="bgvid" id="bgvid" muted loop playsinline preload="auto"
+    aria-hidden="true" poster="bg/hero-loop.jpg" src="bg/hero-loop.mp4"></video>
+  <div class="bg"></div>
+  <div class="stars" id="stA"></div>
+  <div class="stars" id="stB"></div>
+
+  <div class="canvas" id="canvas">
+
+    <div class="stack">
+
+      <!-- ---------- NAV PILL ---------- -->
+      <nav class="nav" id="nav">
+        <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
+          <defs>
+            <linearGradient id="sw" x1="8" y1="8" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#8ef4ff"/>
+              <stop offset=".5" stop-color="#35d8ff"/>
+              <stop offset="1" stop-color="#0a86d8"/>
+            </linearGradient>
+            <linearGradient id="sw2" x1="40" y1="10" x2="10" y2="40" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#a6f7ff"/>
+              <stop offset="1" stop-color="#0f9ae0" stop-opacity=".25"/>
+            </linearGradient>
+          </defs>
+          <g transform="rotate(-32 24 24)">
+            <ellipse cx="24" cy="24" rx="18.5" ry="9.6" fill="none" stroke="url(#sw2)"
+              stroke-width="3.1" stroke-linecap="round" stroke-dasharray="58 30"
+              stroke-dashoffset="14"/>
+            <circle cx="41.4" cy="20.6" r="3.1" fill="#bff6ff"/>
+          </g>
+          <circle cx="24" cy="24" r="6.6" fill="url(#sw)"/>
+          <circle cx="24" cy="24" r="2.6" fill="#fff"/>
+        </svg>
+
+        <span class="wm">
+          <span class="kick">SHOPS</span>
+          <span class="name" id="wmName">VERTEX</span>
+        </span>
+
+        <div class="navmenu" id="navmenu">
+          <div class="links" id="links">
+            <a href="#">Origin</a>
+            <a href="#">Learn how</a>
+            <a href="#">Core Vertex</a>
+            <a href="#">Prices</a>
+            <a href="#">Support</a>
+          </div>
+          <a class="btn" href="#"><span id="ctaLabel">Build new shop</span></a>
+        </div>
+
+        <button class="burger" id="burger" type="button" aria-label="Opens menu"
+          aria-expanded="false" aria-controls="navmenu">
+          <span></span><span></span><span></span>
+        </button>
+      </nav>
+
+      <!-- ---------- BADGE (pixel contract A) ---------- -->
+      <div class="badge">
+        <i>
+          <svg viewBox="5 1 14 22" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M13.9 1.6 5.5 13.6a.7.7 0 0 0 .6 1.1h4.2l-1 7.7a.7.7 0 0 0 1.25.55l8.3-12.1a.7.7 0 0 0-.6-1.1h-4.2l1-7.7a.7.7 0 0 0-1.25-.55Z"
+              fill="rgba(16,112,152,.72)" stroke="rgba(190,236,255,.6)" stroke-width="1.6"
+              stroke-linejoin="round"/>
+          </svg>
+        </i>
+        <b id="badgeTxt">Professionals at store startup</b>
+      </div>
+
+      <!-- ---------- HERO TYPE ---------- -->
+      <div class="h1 l1" id="h1a">Streamline the shop</div>
+      <div class="h1" id="h1b">Process</div>
+      <div class="sub s1" id="sub1"><b>Restructuring store systems / <span class="nb">E-commerce</span></b> orchestrated with</div>
+      <div class="sub" id="sub2">checkouts, performance, a sustainable expansion.</div>
+
+      <!-- ---------- HERO CTA (pixel contract B) ---------- -->
+      <a class="btn cta2" href="#"><span id="vpLabel">See prices</span></a>
+    </div>
+
+    <!-- ---------- 3D CAROUSEL RING ---------- -->
+    <div class="showcase">
+      <div class="ring" id="ring"></div>
+    </div>
+  </div>
+
+    <!-- ---------- WHATSAPP ---------- -->
+  <a class="wa" href="#" aria-label="WhatsApp">
+    <svg viewBox="0 0 32 32" aria-hidden="true">
+      <g transform="scale(1.3333)">
+        <path fill="#fff" d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/>
+      </g>
+    </svg>
+  </a>
+</div>
+
+  <!-- ---------- THE REEL — scroll down ---------- -->
+  <section class="reel" aria-label="Films">
+    <div class="reel-inner">
+      <article class="reel-item">
+        <div class="reel-cap"><span class="reel-name">杰威尔.mp4</span></div>
+        <video class="reel-video" src="web/杰威尔.mp4" poster="web/杰威尔.jpg"
+          muted loop playsinline preload="metadata" aria-label="杰威尔.mp4"></video>
+      </article>
+      <article class="reel-item">
+        <div class="reel-cap"><span class="reel-name">朗朗宣传片.mp4</span></div>
+        <video class="reel-video" src="web/朗朗宣传片.mp4" poster="web/朗朗宣传片.jpg"
+          muted loop playsinline preload="metadata" aria-label="朗朗宣传片.mp4"></video>
+      </article>
+      <article class="reel-item">
+        <div class="reel-cap"><span class="reel-name">音效完成版.mp4</span></div>
+        <video class="reel-video" src="web/音效完成版.mp4" poster="web/音效完成版.jpg"
+          muted loop playsinline preload="metadata" aria-label="音效完成版.mp4"></video>
+      </article>
+      <article class="reel-item">
+        <div class="reel-cap"><span class="reel-name">AFU.mp4</span></div>
+        <video class="reel-video" src="web/AFU.mp4" poster="web/AFU.jpg"
+          muted loop playsinline preload="metadata" aria-label="AFU.mp4"></video>
+      </article>
+    </div>
+  </section>
+
+</body>
+</html>
