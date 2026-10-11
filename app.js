@@ -37,22 +37,6 @@ var CLIPS=[
 ];
 
 /* ==================================================================
-   STARFIELD
-   ================================================================== */
-function starfield(el, count, blur, a1, a2){
-  var out=[], i, x, y, a;
-  for(i=0;i<count;i++){
-    x=(Math.random()*100).toFixed(4);
-    y=(Math.random()*100).toFixed(4);
-    a=(a1+Math.random()*(a2-a1)).toFixed(3);
-    out.push(x+'vw '+y+'vh '+blur+'px 0 rgba(255,255,255,'+a+')');
-  }
-  el.style.boxShadow=out.join(',');
-}
-starfield(document.getElementById('stA'),150,'0',0.05,0.30);   /* 150 stars, blur 0 */
-starfield(document.getElementById('stB'),18,'1.2',0.35,0.70);  /* 18 stars, blur 1.2 */
-
-/* ==================================================================
    6. THE 3D RING
    rAF loop: dt = min((t-last)/1000, .1); phase -= 1.9 * dt (never resets).
    ================================================================== */
@@ -141,13 +125,16 @@ var BIAS=1.1;                              /* the reference sits labels ~0.6px b
 var phone=false, tablet=false, k=1, tboost=1;
 
 var canvas=document.getElementById('canvas');
+/* The hero copy (wordmark, badge, headline, sub, both buttons and the nav
+   links) has been removed, so every lookup below can come back null and the
+   fitter has to cope with that rather than assume the element exists. */
 var h1a=document.getElementById('h1a'), h1b=document.getElementById('h1b');
 var sub1=document.getElementById('sub1'), sub2=document.getElementById('sub2');
 var badgeTxt=document.getElementById('badgeTxt'), wmName=document.getElementById('wmName');
 var navBtn=document.querySelector('.nav .btn'), cta2=document.querySelector('.cta2');
 var ctaLabel=document.getElementById('ctaLabel'), vpLabel=document.getElementById('vpLabel');
 var links=document.getElementById('links');
-var linkEls=links.querySelectorAll('a');
+var linkEls=links? links.querySelectorAll('a') : [];
 
 function fontOf(el){
   var cs=getComputedStyle(el);
@@ -205,32 +192,35 @@ function layout(){
     /* hand EVERY inline style the fitter wrote back — a leftover transform
        would shift the headline off-screen after a resize down from desktop. */
     [h1a,h1b,sub1,sub2,badgeTxt,wmName,ctaLabel,vpLabel].forEach(function(el){
+      if(!el) return;
       el.style.fontSize=''; el.style.top=''; el.style.transform='';
     });
-    links.style.fontSize=''; links.style.transform='';
+    if(links){ links.style.fontSize=''; links.style.transform=''; }
     Array.prototype.forEach.call(linkEls,function(a){ a.style.fontSize=''; });
     placeCards();
     return;
   }
 
   var T=tablet?tboost:1;
-  fitBox(h1a, 563.5*T, 37.2*T, 'translateX(-50%)'); baseline(h1a, 204.5);
-  fitBox(h1b, 197.5*T, 37.2*T, 'translateX(-50%)'); baseline(h1b, 258.5);
-  fitBox(sub1, 389*T,   8.4*T, 'translateX(-50%)'); baseline(sub1, 300.5);
-  fitBox(sub2, 311*T,   8.4*T, 'translateX(-50%)'); baseline(sub2, 316.5);
-  fitBox(badgeTxt, 184*T, 9.4*T, 'translate(2px,-1px)');
-  fitBox(wmName, 51*T, 11.4*T); baseline(wmName, 38.5);
-  fitBox(ctaLabel, 87*T, 8.9*T); centreLabel(navBtn, ctaLabel, 8.9*T);
-  fitBox(vpLabel,  76*T, 9.5*T); centreLabel(cta2, vpLabel,  9.5*T);
+  if(h1a){ fitBox(h1a, 563.5*T, 37.2*T, 'translateX(-50%)'); baseline(h1a, 204.5); }
+  if(h1b){ fitBox(h1b, 197.5*T, 37.2*T, 'translateX(-50%)'); baseline(h1b, 258.5); }
+  if(sub1){ fitBox(sub1, 389*T, 8.4*T, 'translateX(-50%)'); baseline(sub1, 300.5); }
+  if(sub2){ fitBox(sub2, 311*T, 8.4*T, 'translateX(-50%)'); baseline(sub2, 316.5); }
+  if(badgeTxt){ fitBox(badgeTxt, 184*T, 9.4*T, 'translate(2px,-1px)'); }
+  if(wmName){ fitBox(wmName, 51*T, 11.4*T); baseline(wmName, 38.5); }
+  if(ctaLabel && navBtn){ fitBox(ctaLabel, 87*T, 8.9*T); centreLabel(navBtn, ctaLabel, 8.9*T); }
+  if(vpLabel && cta2){ fitBox(vpLabel, 76*T, 9.5*T); centreLabel(cta2, vpLabel, 9.5*T); }
 
-  links.style.transform='';
-  if(tablet){
-    Array.prototype.forEach.call(linkEls,function(a){ a.style.fontSize=''; });
-  } else {
-    var fs=7.9/capRatio(linkEls[0]);                 /* one shared size for the row */
-    Array.prototype.forEach.call(linkEls,function(a){ a.style.fontSize=fs+'px'; });
-    var rowW=linkEls.length?links.getBoundingClientRect().width/k:1;
-    links.style.transform='scaleX('+(317/rowW)+')';  /* squeeze the whole row to 317 */
+  if(links){
+    links.style.transform='';
+    if(tablet || !linkEls.length){
+      Array.prototype.forEach.call(linkEls,function(a){ a.style.fontSize=''; });
+    } else {
+      var fs=7.9/capRatio(linkEls[0]);                 /* one shared size for the row */
+      Array.prototype.forEach.call(linkEls,function(a){ a.style.fontSize=fs+'px'; });
+      var rowW=links.getBoundingClientRect().width/k;
+      links.style.transform='scaleX('+(317/rowW)+')';  /* squeeze the whole row to 317 */
+    }
   }
   placeCards();
 }
@@ -282,41 +272,6 @@ setTimeout(layout,1400);
 requestAnimationFrame(tick);
 
 /* ==================================================================
-   13. ACCESSIBILITY — narrow-viewport menu
-   ================================================================== */
-var burger=document.getElementById('burger'), nav=document.getElementById('nav'),
-    navmenu=document.getElementById('navmenu');
-
-function closeMenu(){
-  nav.classList.remove('open');
-  burger.setAttribute('aria-expanded','false');
-}
-function openMenu(){
-  nav.classList.add('open');
-  burger.setAttribute('aria-expanded','true');
-}
-burger.addEventListener('click', function(e){
-  e.stopPropagation();
-  if(nav.classList.contains('open')){ closeMenu(); } else { openMenu(); }
-});
-document.addEventListener('click', function(e){
-  if(nav.classList.contains('open') && !nav.contains(e.target)) closeMenu();
-});
-document.addEventListener('keydown', function(e){
-  if(e.key==='Escape' && nav.classList.contains('open')){ closeMenu(); burger.focus(); }
-});
-navmenu.addEventListener('click', function(e){
-  var t=e.target;
-  if(t && t.closest && t.closest('a')) closeMenu();
-});
-var bandMQ=window.matchMedia ? matchMedia('(max-width:1080px)') : null;
-if(bandMQ){
-  var onBand=function(e){ if(!e.matches) closeMenu(); };   /* force-close outside the band */
-  if(bandMQ.addEventListener) bandMQ.addEventListener('change', onBand);
-  else if(bandMQ.addListener) bandMQ.addListener(onBand);
-}
-
-/* ==================================================================
    12. MASTER ENTRANCE TIMELINE — runs exactly once, then the page is still
    ================================================================== */
 (function(){
@@ -353,23 +308,8 @@ if(bandMQ){
     if(end>maxEnd){ maxEnd=end; lastAnim=a; }
   }
 
-  /* the frame settles */
-  play(nav,        {opacity:0,translate:Y(-9)}, 620,   60, EXPO);
-  play(document.querySelector('.mark'), {opacity:0,translate:Y(6)}, 520, 150, SOFT);
-  play(document.querySelector('.wm'),   {opacity:0,translate:Y(6)}, 520, 185, SOFT);
-  Array.prototype.forEach.call(linkEls,function(a,idx){
-    play(a, {opacity:0,translate:Y(6)}, 460, 215+idx*45, SOFT);
-  });
-  play(burger,     {opacity:0,translate:Y(6)}, 460,  300, SOFT);
-  play(navBtn,     {opacity:0,translate:Y(6)}, 500,  400, SOFT);
-
-  /* context, then the message */
-  play(document.querySelector('.badge'), {opacity:0,translate:Y(11),scale:.985}, 560, 270, EXPO);
-  play(h1a, {opacity:0,translate:Y(15),clipPath:'inset(100% 0 -30% 0)'}, 900, 380, EXPO);
-  play(h1b, {opacity:0,translate:Y(15),clipPath:'inset(100% 0 -30% 0)'}, 900, 470, EXPO);
-  play(sub1, {opacity:0,translate:Y(10)}, 620, 690, EXPO);
-  play(sub2, {opacity:0,translate:Y(10)}, 620, 745, EXPO);
-  play(cta2, {opacity:0,translate:Y(13),scale:.985}, 620, 830, EXPO);
+  /* the frame settles. The hero copy, the nav pill and the logo are all gone,
+     so the wheel and the floating button are what animate in. */
 
   /* the payoff — the wheel rises into depth */
   play(ring,    {opacity:0,translate:Y(18),scale:.99}, 950,  700, EXPO);
@@ -387,7 +327,7 @@ if(bandMQ){
    parks a film (and scrolling it out of view releases it again). Under
    prefers-reduced-motion nothing auto-plays — the poster frame stands in.
    ================================================================== */
-var reelVids=[].slice.call(document.querySelectorAll('.reel-video'));
+var clipVids=[].slice.call(document.querySelectorAll('.feat-video'));
 
 /* ==================================================================
    9c. SOUND + THE PLAYER
@@ -396,10 +336,10 @@ var reelVids=[].slice.call(document.querySelectorAll('.reel-video'));
    track) with the same control bar the reel films use.
    ================================================================== */
 var FILMS=[
-  {src:'web/杰威尔.mp4',     poster:'web/杰威尔.jpg',     at:7.5},
-  {src:'web/朗朗宣传片.mp4', poster:'web/朗朗宣传片.jpg', at:28.4},
-  {src:'web/音效完成版.mp4', poster:'web/音效完成版.jpg', at:27.2},
-  {src:'web/AFU.mp4',        poster:'web/AFU.jpg',        at:11.7}
+  {src:'web/杰威尔.mp4',     poster:'web/杰威尔.jpg'},
+  {src:'web/朗朗宣传片.mp4', poster:'web/朗朗宣传片.jpg'},
+  {src:'web/音效完成版.mp4', poster:'web/音效完成版.jpg'},
+  {src:'web/AFU.mp4',        poster:'web/AFU.jpg'}
 ];
 
 var ICO={
@@ -445,16 +385,22 @@ function buildPlayer(video){
   var btnPlay=bar.querySelector('.pplay'), btnMute=bar.querySelector('.pmute');
   var cur=bar.querySelector('.pcur'), dur=bar.querySelector('.pdur');
   var pbar=bar.querySelector('.pbar'), pfill=bar.querySelector('.pfill');
+  var pknob=bar.querySelector('.pbar .pknob');
   var vol=bar.querySelector('.pvol'), vfill=bar.querySelector('.pvolfill');
+  var vknob=bar.querySelector('.pvol .pknob');
 
   function paintTime(){
     var d=video.duration||0, t=video.currentTime||0;
-    pfill.style.width=(d? (t/d*100) : 0)+'%';
+    var pct=d? (t/d*100) : 0;
+    pfill.style.width=pct+'%';
+    pknob.style.left=pct+'%';                 /* the knob rides the progress */
     cur.textContent=fmtTime(t);
     dur.textContent=fmtTime(d);
   }
   function paintVol(){
-    vfill.style.width=(video.muted? 0 : video.volume*100)+'%';
+    var pct=video.muted? 0 : video.volume*100;
+    vfill.style.width=pct+'%';
+    vknob.style.left=pct+'%';
     btnMute.innerHTML=(video.muted || !video.volume)? ICO.mute : ICO.vol;
   }
   function paintPlay(){ btnPlay.innerHTML=video.paused? ICO.play : ICO.pause; }
@@ -535,7 +481,8 @@ function openFilm(idx, card){
   /* freeze the wheel so the card we flew out of stays put, and stop the
      decorative clips from decoding behind the pop-up */
   for(var i=0;i<cards.length;i++){ var v=cards[i]._v; if(v && !v.paused) v.pause(); }
-  for(var r=0;r<reelVids.length;r++){ if(!reelVids[r].paused) reelVids[r].pause(); }
+  for(var r=0;r<clipVids.length;r++){ if(!clipVids[r].paused) clipVids[r].pause(); }
+  coverSync();                                   /* the cover hides behind the modal */
 
   modal.classList.add('on');
   modal.setAttribute('aria-hidden','false');
@@ -563,11 +510,8 @@ function openFilm(idx, card){
 
   /* The film only starts loading now that the box is on screen — a hidden
      <video> has its loading deferred, which is why it used to sit at 0:00.
-     Play first (so it starts the moment data arrives) and seek on metadata. */
-  mvideo.onloadedmetadata=function(){
-    mvideo.onloadedmetadata=null;
-    try{ mvideo.currentTime=f.at; }catch(e){}      /* land where the card was */
-  };
+     No seek here: the popped film always plays from the very beginning. */
+  mvideo.onloadedmetadata=null;
   mvideo.muted=false;
   mvideo.volume=.6;
   mvideo._ui.paintVol();
@@ -596,7 +540,8 @@ function closeFilm(){
     mvideo.removeAttribute('src'); mvideo.load();     /* free the film */
     mbox.style.transition='none'; mbox.style.transform='none'; mbox.style.opacity='1';
     modalCard=null;
-    syncReel();
+    syncClips();
+    coverSync();
   }
   if(back){
     var s=back.width/fr.width;
@@ -616,46 +561,80 @@ function closeFilm(){
 mclose.addEventListener('click', closeFilm);
 modal.addEventListener('click', function(e){ if(e.target.hasAttribute('data-close')) closeFilm(); });
 document.addEventListener('keydown', function(e){
-  if(e.key==='Escape'){
-    if(modalOpen) closeFilm();
-    else if(nav.classList.contains('open')){ closeMenu(); burger.focus(); }
-  }
+  if(e.key==='Escape' && modalOpen) closeFilm();
 });
 
 /* the reel films get the very same control bar */
-reelVids.forEach(function(v){ buildPlayer(v); });
+clipVids.forEach(function(v){ buildPlayer(v); });
 
-/* the hero's background film: fades in once it has a frame, and obeys the same
-   reduced-motion / hidden-tab rules as everything else */
-var bgvid=document.getElementById('bgvid');
-function bgvidSync(){
-  if(!bgvid) return;
-  if(reduce || document.hidden){ if(!bgvid.paused) bgvid.pause(); }
-  else { var p=bgvid.play(); if(p && p.catch) p.catch(function(){}); }
-}
-if(bgvid){
-  bgvid.addEventListener('loadeddata', function(){ bgvid.classList.add('on'); });
-  if(bgvid.readyState>=2) bgvid.classList.add('on');
-  bgvidSync();
-}
+/* ==================================================================
+   THE COVER — four seasonal films, one visible at a time, with the
+   train-window PNG bobbing on top. Switching crossfades over 1000ms.
+   ================================================================== */
+var coverVids=[].slice.call(document.querySelectorAll('.cover .cv'));
+var seasons=document.getElementById('seasons');
+var seasonBtns=seasons? [].slice.call(seasons.querySelectorAll('.season')) : [];
+var activeCover=0, coverSwitching=false;
 
-function reelPlay(v){
+function coverSync(){
+  for(var i=0;i<coverVids.length;i++){
+    var v=coverVids[i];
+    if(reduce || document.hidden || modalOpen){      /* nothing runs unseen */
+      if(!v.paused) v.pause();
+      continue;
+    }
+    if(i===activeCover || coverSwitching){           /* the outgoing keeps rolling
+                                                        until the fade finishes */
+      var p=v.play(); if(p && p.catch) p.catch(function(){});
+    } else if(!v.paused){
+      v.pause();
+    }
+  }
+}
+function showCover(i){
+  if(i===activeCover || coverSwitching || !coverVids[i]) return;
+  coverSwitching=true;
+  coverVids[i].classList.add('on');
+  coverVids[activeCover].classList.remove('on');
+  activeCover=i;
+  for(var k=0;k<seasonBtns.length;k++){
+    seasonBtns[k].classList.toggle('is-on', k===i);
+    seasonBtns[k].setAttribute('aria-pressed', k===i? 'true':'false');
+  }
+  seasons.classList.toggle('dark', i===2);   /* Deep Woods: copy flips to dark ink */
+  coverSync();
+  setTimeout(function(){ coverSwitching=false; coverSync(); }, 1000);
+}
+seasonBtns.forEach(function(b){
+  b.addEventListener('click', function(){ showCover(+b.getAttribute('data-i')); });
+});
+coverSync();
+
+function clipPlay(v){
   if(reduce || document.hidden) return;
   var p=v.play();
   if(p && p.catch) p.catch(function(){});
 }
-function syncReel(){
-  for(var i=0;i<reelVids.length;i++){
-    var v=reelVids[i], r=v.getBoundingClientRect();
+function syncClips(){
+  for(var i=0;i<clipVids.length;i++){
+    var v=clipVids[i], r=v.getBoundingClientRect();
     var inView = r.top < innerHeight*0.88 && r.bottom > innerHeight*0.12;
-    if(!inView) v._held=false;               /* leaving the screen releases the hold */
-    if(inView && !v._held) reelPlay(v);
-    else if(!v.paused) v.pause();
+    if(!inView){
+      v._held=false;                          /* leaving the screen releases the hold */
+      if(v._in){ v._in=false; if(!v.paused) v.pause(); }
+      continue;
+    }
+    if(!v._in){                               /* just came on screen: rewind to 0:00 */
+      v._in=true;
+      if(!v._held){ try{ v.currentTime=0; }catch(e){} clipPlay(v); }
+    } else if(!v._held && v.paused){
+      clipPlay(v);
+    }
   }
 }
-reelVids.forEach(function(v){
+clipVids.forEach(function(v){
   v.addEventListener('click', function(){
-    if(v.paused){ v._held=false; reelPlay(v); }
+    if(v.paused){ v._held=false; clipPlay(v); }
     else { v._held=true; v.pause(); }
   });
 });
@@ -664,25 +643,25 @@ var reelTick=false;
 function onScroll(){
   if(reelTick) return;
   reelTick=true;
-  requestAnimationFrame(function(){ reelTick=false; syncReel(); });
+  requestAnimationFrame(function(){ reelTick=false; syncClips(); });
 }
 
 /* An IntersectionObserver is the primary trigger: it also fires for films that
    are already on screen when the page opens (a reload that restores the scroll
    position, or a deep link), which a scroll listener alone would miss. */
 if(window.IntersectionObserver){
-  var reelIO=new IntersectionObserver(function(){ syncReel(); },
+  var reelIO=new IntersectionObserver(function(){ syncClips(); },
     {threshold:[0,.05,.25,.5,.75,1]});
-  reelVids.forEach(function(v){ reelIO.observe(v); });
+  clipVids.forEach(function(v){ reelIO.observe(v); });
 }
 addEventListener('scroll', onScroll, {passive:true});
-addEventListener('resize', function(){ syncReel(); bgvidSync(); });
-addEventListener('pageshow', function(){ syncReel(); bgvidSync(); });
+addEventListener('resize', function(){ syncClips(); coverSync(); });
+addEventListener('pageshow', function(){ syncClips(); coverSync(); });
 document.addEventListener('visibilitychange', function(){
-  if(document.hidden) reelVids.forEach(function(v){ if(!v.paused) v.pause(); });
-  else syncReel();
-  bgvidSync();
+  if(document.hidden) clipVids.forEach(function(v){ if(!v.paused) v.pause(); });
+  else syncClips();
+  coverSync();
 });
-syncReel();
+syncClips();
 
 }
