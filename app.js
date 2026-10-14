@@ -396,7 +396,7 @@ function buildPlayer(video){
      the finger is down (and until the seek it launched has landed) the clock
      is muted, so `timeupdate` can never drag the knob back out from under
      the thumb. */
-  var scrubbing=false, pendingT=null, seekRaf=0, seekHold=false, holdT=0;
+  var scrubbing=false, pendingT=null, seekRaf=0, seekHold=false, holdT=0, wantT=null;
 
   function paintTime(){
     var d=video.duration||0, t=video.currentTime||0;
@@ -439,6 +439,7 @@ function buildPlayer(video){
     if(!d){ cur.textContent='0:00'; return; }
     cur.textContent=fmtTime(p*d);
     pendingT=p*d;
+    wantT=pendingT;                          /* kept until it is really reached */
     if(!seekRaf) seekRaf=requestAnimationFrame(function(){
       seekRaf=0;
       if(pendingT==null) return;
@@ -464,6 +465,16 @@ function buildPlayer(video){
     video.muted=(p===0);
     if(!video.muted) focusSound(video);
     paintVol();
+  }
+  /* A drag that lands before the film has any data at that offset is dropped by
+     the media element (its seekable range is still empty). Rather than lose the
+     seek, remember where the finger left off and re-ask as soon as the element
+     can honour it — which is what makes scrubbing feel right on a slow mobile
+     connection. */
+  function retrySeek(){
+    if(wantT==null || scrubbing) return;
+    if(Math.abs(video.currentTime-wantT) < 0.5){ wantT=null; return; }
+    try{ video.currentTime=wantT; }catch(err){}
   }
   /* A drag has to start on the rail and then belong to it, whatever the finger
      wanders over. `touch-action:none` in the CSS keeps the browser from
@@ -539,8 +550,11 @@ function buildPlayer(video){
   video.addEventListener('timeupdate', paintTime);
   video.addEventListener('durationchange', paintTime);
   video.addEventListener('loadedmetadata', paintTime);
+  video.addEventListener('loadeddata', retrySeek);
+  video.addEventListener('canplay', retrySeek);
   /* the seek finished: hand the rail back to the element */
   video.addEventListener('seeked', function(){
+    if(wantT!=null && Math.abs(video.currentTime-wantT) < 0.75) wantT=null;
     if(!seekHold) return;
     seekHold=false; clearTimeout(holdT); paintTime();
   });
