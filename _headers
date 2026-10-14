@@ -5,20 +5,3 @@
 
 /
   Cache-Control: no-store
-
-# The films are the opposite case: they are large, they are only ever read, and
-# a browser can only scrub a video the edge is willing to serve in byte ranges.
-# Left at the default (max-age=0) every play went back to the origin, which came
-# back without range support - so a drag on the bar restarted the clip from 0.
-# Caching them at the edge is what makes seeking work.
-/web/*
-  Cache-Control: public, max-age=604800
-
-/clips/*
-  Cache-Control: public, max-age=604800
-
-/cover/*
-  Cache-Control: public, max-age=604800
-
-/bg/*
-  Cache-Control: public, max-age=604800
