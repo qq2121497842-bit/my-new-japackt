@@ -1,0 +1,7 @@
+# Cloudflare Pages headers. The page itself is never cached: this site gets
+# edited often and is checked on a phone, where a stale copy is hard to shake.
+/index.html
+  Cache-Control: no-store
+
+/
+  Cache-Control: no-store
