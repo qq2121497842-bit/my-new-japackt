@@ -183,6 +183,11 @@ a{text-decoration:none;color:inherit}                          /* button labels 
 .pbar.grabbing::before,.pvol.grabbing::before{background:rgba(255,255,255,.3)}
 .pbar:hover .pknob,.pvol:hover .pknob{transform:scale(1.28)}
 
+/* the host will not serve this film in byte ranges, so the file is coming down
+   before the bar can work: say so rather than leaving the rail dead */
+.player.loading .pbar::before{background:rgba(255,255,255,.34)}
+.player.loading .pdur{color:#7fe6ff}
+
 /* Touch screens: a finger is a fat, imprecise tool, so the rails become 26px
    hit strips (the 3px track stays optically centred) and the knob grows. The
    bar is then grabbable at a glance instead of only by luck. */

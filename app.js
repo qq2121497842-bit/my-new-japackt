@@ -355,6 +355,7 @@ function fmtTime(t){
   var m=Math.floor(t/60), s=t%60;
   return m+':'+(s<10?'0':'')+s;
 }
+function nowMs(){ return (window.performance && performance.now)? performance.now() : Date.now(); }
 
 var players=[];                                  /* every player we build */
 function focusSound(v){                          /* only one film may be audible */
@@ -398,10 +399,76 @@ function buildPlayer(video){
      the thumb. */
   var scrubbing=false, pendingT=null, seekRaf=0, seekHold=false, holdT=0, wantT=null;
 
+  /* ---- films this host will not let us scrub ------------------------------
+     A stream the browser cannot byte-range is a stream it refuses to scrub:
+     set currentTime on one and the element quietly restarts from zero — the
+     knob snaps back under your thumb and the picture jumps to the first
+     frame. That is what a server does when it answers a range request with a
+     plain 200 instead of 206, which is exactly what this project's host does
+     on some links.
+
+     So the first time a finger lands on the rail of such a film, pull the
+     whole file down once and play it from a blob. Seeking is then an in-memory
+     operation and the bar works however the file is served. A host that does
+     serve ranges never reaches this code at all. */
+  var blobUrl=null, blobBusy=false, blobGoal=null, blobPlay=false;
+
+  function seekable(){
+    var s=video.seekable;
+    return !!(s && s.length && s.end(s.length-1) > 0.5);
+  }
+  function paintLoad(p){
+    if(p==null){ player.classList.remove('loading'); return; }
+    player.classList.add('loading');
+    dur.textContent='载入 '+Math.round(p*100)+'%';
+  }
+  function adoptBlob(goal){
+    if(goal!=null) blobGoal=goal;
+    if(blobUrl || blobBusy) return;
+    var src=video.getAttribute('src');
+    if(!src || src.slice(0,5)==='blob:') return;
+    blobBusy=true; blobPlay=!video.paused;
+    paintLoad(0);
+    fetch(src).then(function(r){
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      var len=+r.headers.get('content-length')||0;
+      if(!r.body || !r.body.getReader) return r.blob();
+      var parts=[], got=0, rdr=r.body.getReader();
+      return (function step(){
+        return rdr.read().then(function(c){
+          if(c.done) return new Blob(parts, {type:'video/mp4'});
+          parts.push(c.value); got+=c.value.length;
+          if(len) paintLoad(got/len);
+          return step();
+        });
+      })();
+    }).then(function(b){
+      blobUrl=URL.createObjectURL(b);
+      var goal=blobGoal;
+      video.addEventListener('loadedmetadata', function ready(){
+        video.removeEventListener('loadedmetadata', ready);
+        blobBusy=false;
+        paintLoad(null);
+        if(goal!=null){ try{ video.currentTime=goal; }catch(err){} }
+        wantT=null; pendingT=null;
+        seekHold=true;                         /* hold the bar where the finger left it */
+        clearTimeout(holdT);
+        holdT=setTimeout(function(){ seekHold=false; paintTime(); }, 420);
+        if(blobPlay){ var p=video.play(); if(p&&p.catch) p.catch(function(){}); }
+      });
+      video.src=blobUrl;
+      video.load();
+    }).catch(function(){ blobBusy=false; blobGoal=null; paintLoad(null); paintTime(); });
+  }
+  /* the pop-up keeps one <video> and points it at a different film each time */
+  video.addEventListener('emptied', function(){
+    if(video.getAttribute('src')!==blobUrl){ blobUrl=null; blobBusy=false; blobGoal=null; }
+  });
+
   function paintTime(){
     var d=video.duration||0, t=video.currentTime||0;
-    dur.textContent=fmtTime(d);
-    if(scrubbing || seekHold) return;        /* the finger owns the rail */
+    if(!blobBusy) dur.textContent=fmtTime(d);
+    if(scrubbing || seekHold || blobBusy) return;   /* the finger owns the rail */
     var pct=d? (t/d*100) : 0;
     pfill.style.width=pct+'%';
     pknob.style.left=pct+'%';                 /* the knob rides the progress */
@@ -434,12 +501,17 @@ function buildPlayer(video){
   function seekAt(e){
     var p=ratioFrom(e, pbar), d=video.duration||0;
     scrubbing=true;
+    video._scrubAt=nowMs();                   /* the reel's auto-rewind must yield to this */
     pfill.style.width=(p*100)+'%';            /* the bar answers the finger at once */
     pknob.style.left=(p*100)+'%';
     if(!d){ cur.textContent='0:00'; return; }
-    cur.textContent=fmtTime(p*d);
     pendingT=p*d;
     wantT=pendingT;                          /* kept until it is really reached */
+    cur.textContent=fmtTime(pendingT);
+    if(!blobUrl && !seekable()){              /* no ranges: go get the file instead */
+      adoptBlob(pendingT);
+      return;
+    }
     if(!seekRaf) seekRaf=requestAnimationFrame(function(){
       seekRaf=0;
       if(pendingT==null) return;
@@ -449,12 +521,16 @@ function buildPlayer(video){
   function seekEnd(){
     if(seekRaf){ cancelAnimationFrame(seekRaf); seekRaf=0; }
     if(pendingT!=null){
-      try{ video.currentTime=pendingT; }catch(err){}
-      /* hold the paint until the decoder reports where it landed, otherwise
-         the bar blinks back to the old position for a frame or two */
-      seekHold=true;
-      clearTimeout(holdT);
-      holdT=setTimeout(function(){ seekHold=false; paintTime(); }, 320);
+      if(blobBusy){
+        blobGoal=pendingT;                    /* it lands where the finger left off */
+      } else {
+        try{ video.currentTime=pendingT; }catch(err){}
+        /* hold the paint until the decoder reports where it landed, otherwise
+           the bar blinks back to the old position for a frame or two */
+        seekHold=true;
+        clearTimeout(holdT);
+        holdT=setTimeout(function(){ seekHold=false; paintTime(); }, 320);
+      }
     }
     pendingT=null;
     scrubbing=false;
@@ -473,6 +549,7 @@ function buildPlayer(video){
      connection. */
   function retrySeek(){
     if(wantT==null || scrubbing) return;
+    if(!seekable()) return;                   /* that film needs the blob, not a retry */
     if(Math.abs(video.currentTime-wantT) < 0.5){ wantT=null; return; }
     try{ video.currentTime=wantT; }catch(err){}
   }
@@ -718,6 +795,7 @@ function clipPlay(v){
   if(p && p.catch) p.catch(function(){});
 }
 function syncClips(){
+  var t=nowMs();
   for(var i=0;i<clipVids.length;i++){
     var v=clipVids[i], r=v.getBoundingClientRect();
     var inView = r.top < innerHeight*0.88 && r.bottom > innerHeight*0.12;
@@ -728,7 +806,10 @@ function syncClips(){
     }
     if(!v._in){                               /* just came on screen: rewind to 0:00 */
       v._in=true;
-      if(!v._held){ try{ v.currentTime=0; }catch(e){} clipPlay(v); }
+      /* unless a finger is on the bar, or was a moment ago: a scrub outranks
+         the auto-rewind, whichever order the two happen to arrive in */
+      var fresh=v._scrubAt!=null && (t-v._scrubAt)<2500;
+      if(!v._held && !fresh){ try{ v.currentTime=0; }catch(e){} clipPlay(v); }
     } else if(!v._held && v.paused){
       clipPlay(v);
     }
