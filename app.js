@@ -389,13 +389,23 @@ function buildPlayer(video){
   var vol=bar.querySelector('.pvol'), vfill=bar.querySelector('.pvolfill');
   var vknob=bar.querySelector('.pvol .pknob');
 
+  /* ---- the scrub state ---------------------------------------------------
+     A finger on the rail paints the bar directly and tells the <video> about
+     it once per animation frame — one seek per frame instead of one per
+     touchmove, which is what used to make the drag stutter on a phone. While
+     the finger is down (and until the seek it launched has landed) the clock
+     is muted, so `timeupdate` can never drag the knob back out from under
+     the thumb. */
+  var scrubbing=false, pendingT=null, seekRaf=0, seekHold=false, holdT=0;
+
   function paintTime(){
     var d=video.duration||0, t=video.currentTime||0;
+    dur.textContent=fmtTime(d);
+    if(scrubbing || seekHold) return;        /* the finger owns the rail */
     var pct=d? (t/d*100) : 0;
     pfill.style.width=pct+'%';
     pknob.style.left=pct+'%';                 /* the knob rides the progress */
     cur.textContent=fmtTime(t);
-    dur.textContent=fmtTime(d);
   }
   function paintVol(){
     var pct=video.muted? 0 : video.volume*100;
@@ -416,13 +426,37 @@ function buildPlayer(video){
   });
 
   function ratioFrom(e, el){
+    var pt=e.touches? (e.touches[0]||e.changedTouches[0]) : e;
     var r=el.getBoundingClientRect();
-    var x=(e.touches? e.touches[0].clientX : e.clientX) - r.left;
-    return Math.min(1, Math.max(0, x/r.width));
+    if(!pt || !r.width) return 0;
+    return Math.min(1, Math.max(0, (pt.clientX-r.left)/r.width));
   }
   function seekAt(e){
-    if(video.duration) video.currentTime=ratioFrom(e, pbar)*video.duration;
-    paintTime();
+    var p=ratioFrom(e, pbar), d=video.duration||0;
+    scrubbing=true;
+    pfill.style.width=(p*100)+'%';            /* the bar answers the finger at once */
+    pknob.style.left=(p*100)+'%';
+    if(!d){ cur.textContent='0:00'; return; }
+    cur.textContent=fmtTime(p*d);
+    pendingT=p*d;
+    if(!seekRaf) seekRaf=requestAnimationFrame(function(){
+      seekRaf=0;
+      if(pendingT==null) return;
+      try{ video.currentTime=pendingT; }catch(err){}
+    });
+  }
+  function seekEnd(){
+    if(seekRaf){ cancelAnimationFrame(seekRaf); seekRaf=0; }
+    if(pendingT!=null){
+      try{ video.currentTime=pendingT; }catch(err){}
+      /* hold the paint until the decoder reports where it landed, otherwise
+         the bar blinks back to the old position for a frame or two */
+      seekHold=true;
+      clearTimeout(holdT);
+      holdT=setTimeout(function(){ seekHold=false; paintTime(); }, 320);
+    }
+    pendingT=null;
+    scrubbing=false;
   }
   function volAt(e){
     var p=ratioFrom(e, vol);
@@ -431,16 +465,65 @@ function buildPlayer(video){
     if(!video.muted) focusSound(video);
     paintVol();
   }
-  function draggable(el, fn){
-    el.addEventListener('pointerdown', function(e){
-      e.preventDefault();
-      try{ if(el.setPointerCapture) el.setPointerCapture(e.pointerId); }catch(err){}
+  /* A drag has to start on the rail and then belong to it, whatever the finger
+     wanders over. `touch-action:none` in the CSS keeps the browser from
+     claiming the gesture as a scroll (which is what silently killed the drag
+     on phones: the first move raised pointercancel and the listener died), and
+     every move is preventDefault-ed as backup. */
+  function draggable(el, fn, done){
+    var grab=null;                             /* the pointer that owns the rail */
+
+    function begin(e){
+      if(grab!==null) return;
+      grab=(e.pointerId==null? 'touch' : e.pointerId);
+      el.classList.add('grabbing');
+      if(el.setPointerCapture && e.pointerId!=null){
+        try{ el.setPointerCapture(e.pointerId); }catch(err){}
+      }
       fn(e);
-      var move=function(ev){ fn(ev); };
-      var up=function(){ el.removeEventListener('pointermove',move); el.removeEventListener('pointerup',up); };
-      el.addEventListener('pointermove',move);
-      el.addEventListener('pointerup',up);
-    });
+    }
+    function move(e){
+      if(grab===null) return;
+      if(e.cancelable) e.preventDefault();     /* never let the page scroll under the finger */
+      fn(e);
+    }
+    function end(e){
+      if(grab===null) return;
+      grab=null;
+      el.classList.remove('grabbing');
+      if(e && el.releasePointerCapture && e.pointerId!=null){
+        try{ el.releasePointerCapture(e.pointerId); }catch(err){}
+      }
+      if(done) done();
+    }
+
+    if(window.PointerEvent){
+      el.addEventListener('pointerdown', function(e){
+        if(e.pointerType==='mouse' && e.button!==0) return;
+        e.preventDefault();                    /* no text drag, no phantom click */
+        begin(e);
+      });
+      el.addEventListener('pointermove', move);        /* captured moves land here */
+      el.addEventListener('pointerup', end);
+      el.addEventListener('pointercancel', end);       /* a cancelled drag still releases */
+      el.addEventListener('lostpointercapture', end);
+      /* belt and braces: if capture was refused, moves arrive at the document */
+      document.addEventListener('pointermove', function(e){
+        if(e.target!==el) move(e);
+      });
+      document.addEventListener('pointerup', function(e){ if(e.target!==el) end(e); });
+      document.addEventListener('pointercancel', function(e){ if(e.target!==el) end(e); });
+    } else {
+      /* iOS 12 and other pre-PointerEvent browsers: listen to touch directly */
+      el.addEventListener('touchstart', function(e){ e.preventDefault(); begin(e); }, {passive:false});
+      el.addEventListener('touchmove', move, {passive:false});
+      el.addEventListener('touchend', end);
+      el.addEventListener('touchcancel', end);
+      el.addEventListener('mousedown', function(e){ e.preventDefault(); begin(e); });
+      document.addEventListener('mousemove', function(e){ if(grab!==null) move(e); });
+      document.addEventListener('mouseup', function(e){ if(grab!==null) end(e); });
+    }
+
     el.addEventListener('keydown', function(e){    /* arrows work too */
       if(e.key!=='ArrowLeft' && e.key!=='ArrowRight') return;
       e.preventDefault();
@@ -450,12 +533,17 @@ function buildPlayer(video){
       paintTime();
     });
   }
-  draggable(pbar, seekAt);
+  draggable(pbar, seekAt, seekEnd);
   draggable(vol, volAt);
 
   video.addEventListener('timeupdate', paintTime);
   video.addEventListener('durationchange', paintTime);
   video.addEventListener('loadedmetadata', paintTime);
+  /* the seek finished: hand the rail back to the element */
+  video.addEventListener('seeked', function(){
+    if(!seekHold) return;
+    seekHold=false; clearTimeout(holdT); paintTime();
+  });
   video.addEventListener('play', paintPlay);
   video.addEventListener('pause', paintPlay);
   video.addEventListener('volumechange', paintVol);

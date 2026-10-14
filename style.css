@@ -159,19 +159,38 @@ a{text-decoration:none;color:inherit}                          /* button labels 
 .pbtn svg{display:block;width:15px;height:15px}
 .ptime{flex:0 0 auto;font-size:11.5px;color:rgba(255,255,255,.6);
   font-variant-numeric:tabular-nums}
-.pbar,.pvol{position:relative;height:14px;cursor:pointer}
+.pbar,.pvol{position:relative;height:14px;cursor:pointer;
+  /* THE mobile fix: without touch-action:none the browser reads the first
+     sideways pixel of a drag as a page scroll, fires pointercancel, and the
+     bar goes dead — tap-to-seek keeps working, dragging never does. These two
+     lines hand the whole gesture to the rail instead. */
+  touch-action:none;-webkit-user-select:none;user-select:none;
+  -webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
 .pbar{flex:1 1 auto}
 .pvol{flex:0 0 auto;width:56px}
-.pbar::before,.pvol::before{content:"";position:absolute;left:0;right:0;top:6px;height:3px;
-  border-radius:2px;background:rgba(255,255,255,.16)}
-.pfill{position:absolute;left:0;top:6px;height:3px;border-radius:2px;background:#35d8ff;
-  pointer-events:none}
-.pvolfill{position:absolute;left:0;top:6px;height:3px;border-radius:2px;
-  background:rgba(255,255,255,.62);pointer-events:none}
-.pknob{position:absolute;top:7.5px;width:10px;height:10px;margin:-5px 0 0 -5px;
+/* the track is vertically centred rather than pinned to top:6px, so the hit
+   strip can grow for fingers without moving the ink */
+.pbar::before,.pvol::before{content:"";position:absolute;left:0;right:0;top:50%;height:3px;
+  border-radius:2px;background:rgba(255,255,255,.16);transform:translateY(-50%)}
+.pfill{position:absolute;left:0;top:50%;height:3px;border-radius:2px;background:#35d8ff;
+  transform:translateY(-50%);pointer-events:none}
+.pvolfill{position:absolute;left:0;top:50%;height:3px;border-radius:2px;
+  background:rgba(255,255,255,.62);transform:translateY(-50%);pointer-events:none}
+.pknob{position:absolute;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;
   border-radius:50%;background:#fff;pointer-events:none;
   transition:left .12s linear,transform .18s ease}
+.pbar.grabbing .pknob,.pvol.grabbing .pknob{transition:none}   /* 1:1 with the finger */
+.pbar.grabbing::before,.pvol.grabbing::before{background:rgba(255,255,255,.3)}
 .pbar:hover .pknob,.pvol:hover .pknob{transform:scale(1.28)}
+
+/* Touch screens: a finger is a fat, imprecise tool, so the rails become 26px
+   hit strips (the 3px track stays optically centred) and the knob grows. The
+   bar is then grabbable at a glance instead of only by luck. */
+@media (pointer:coarse),(max-width:700px){
+  .pbar,.pvol{height:26px}
+  .pknob{width:14px;height:14px;margin:-7px 0 0 -7px}
+  .pfill,.pvolfill,.pbar::before,.pvol::before{height:4px}
+}
 
 /* ---------- the film pop-up ---------- */
 .modal{position:fixed;inset:0;z-index:700;display:none;align-items:center;
@@ -192,9 +211,11 @@ body.noscroll{overflow:hidden}
 @media (prefers-reduced-motion:reduce){ .mback{transition:none} }
 
 @media (max-width:700px){
-  .pctl{gap:9px;padding:8px 10px}
+  /* the row is tight on a phone: shaving the gaps and the volume rail gives
+     the progress bar back the width it needs to be scrubbed */
+  .pctl{gap:8px;padding:8px 10px}
   .ptime{font-size:10.5px}
-  .pvol{width:44px}
+  .pvol{width:36px}
   .mclose{bottom:calc(100% + 8px)}
 }
 
