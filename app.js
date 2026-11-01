@@ -323,9 +323,9 @@ requestAnimationFrame(tick);
 
 /* ==================================================================
    9b. THE REEL — the films below the fold.
-   Muted, looped, and played only while they are actually on screen; a click
-   parks a film (and scrolling it out of view releases it again). Under
-   prefers-reduced-motion nothing auto-plays — the poster frame stands in.
+   Muted, looped, and played only while they are actually on screen. Leaving
+   the viewport pauses a film without changing its playhead, so returning
+   resumes from the same frame. Under prefers-reduced-motion nothing auto-plays.
    ================================================================== */
 var clipVids=[].slice.call(document.querySelectorAll('.feat-video'));
 
@@ -355,8 +355,6 @@ function fmtTime(t){
   var m=Math.floor(t/60), s=t%60;
   return m+':'+(s<10?'0':'')+s;
 }
-function nowMs(){ return (window.performance && performance.now)? performance.now() : Date.now(); }
-
 var players=[];                                  /* every player we build */
 function focusSound(v){                          /* only one film may be audible */
   for(var i=0;i<players.length;i++){
@@ -397,7 +395,7 @@ function buildPlayer(video){
      the finger is down (and until the seek it launched has landed) the clock
      is muted, so `timeupdate` can never drag the knob back out from under
      the thumb. */
-  var scrubbing=false, pendingT=null, seekRaf=0, seekHold=false, holdT=0, wantT=null;
+  var scrubbing=false, pendingT=null, seekTimer=0, seekHold=false, holdT=0, wantT=null;
 
   /* ---- films this host will not let us scrub ------------------------------
      A stream the browser cannot byte-range is a stream it refuses to scrub:
@@ -460,6 +458,30 @@ function buildPlayer(video){
       video.load();
     }).catch(function(){ blobBusy=false; blobGoal=null; paintLoad(null); paintTime(); });
   }
+
+  /* A reel film starts downloading its complete file as soon as it comes into
+     view. If that download is ready before the user grabs the rail, swap the
+     same <video> to the local blob and seek there. This removes the network
+     range request from the critical path and is much faster than repeatedly
+     asking a remote server for separate seek positions. */
+  function useWarmBlob(goal){
+    if(!video._warmBlob || video.getAttribute('src')===video._warmBlob) return false;
+    blobUrl=video._warmBlob;
+    blobPlay=!video.paused;
+    wantT=goal;
+    seekHold=true;
+    video.addEventListener('loadedmetadata', function ready(){
+      video.removeEventListener('loadedmetadata', ready);
+      if(goal!=null){ try{ video.currentTime=goal; }catch(err){} }
+      pendingT=null; scrubbing=false;
+      clearTimeout(holdT);
+      holdT=setTimeout(function(){ seekHold=false; paintTime(); }, 220);
+      if(blobPlay){ var p=video.play(); if(p&&p.catch) p.catch(function(){}); }
+    });
+    video.src=blobUrl;
+    video.load();
+    return true;
+  }
   /* the pop-up keeps one <video> and points it at a different film each time */
   video.addEventListener('emptied', function(){
     if(video.getAttribute('src')!==blobUrl){ blobUrl=null; blobBusy=false; blobGoal=null; }
@@ -501,25 +523,35 @@ function buildPlayer(video){
   function seekAt(e){
     var p=ratioFrom(e, pbar), d=video.duration||0;
     scrubbing=true;
-    video._scrubAt=nowMs();                   /* the reel's auto-rewind must yield to this */
     pfill.style.width=(p*100)+'%';            /* the bar answers the finger at once */
     pknob.style.left=(p*100)+'%';
     if(!d){ cur.textContent='0:00'; return; }
     pendingT=p*d;
     wantT=pendingT;                          /* kept until it is really reached */
     cur.textContent=fmtTime(pendingT);
+    if(!blobUrl && video._warmBlob){         /* this film is already cached locally */
+      useWarmBlob(pendingT);
+      return;
+    }
     if(!blobUrl && !seekable()){              /* no ranges: go get the file instead */
       adoptBlob(pendingT);
       return;
     }
-    if(!seekRaf) seekRaf=requestAnimationFrame(function(){
-      seekRaf=0;
-      if(pendingT==null) return;
-      try{ video.currentTime=pendingT; }catch(err){}
-    });
+    /* During a drag, seeking the decoder on every pointermove makes it cancel
+       one network range request after another. Update the knob immediately,
+       preview at a bounded cadence, then send the one exact seek on release. */
+    if(!seekTimer) seekTimer=setTimeout(function(){
+      seekTimer=0;
+      if(pendingT==null || scrubbing===false) return;
+      try{
+        if(video.fastSeek && Math.abs(video.currentTime-pendingT)>1) video.fastSeek(pendingT);
+        else video.currentTime=pendingT;
+      }catch(err){}
+    }, 150);
   }
   function seekEnd(){
-    if(seekRaf){ cancelAnimationFrame(seekRaf); seekRaf=0; }
+    var resumePlayback=!video.paused;
+    if(seekTimer){ clearTimeout(seekTimer); seekTimer=0; }
     if(pendingT!=null){
       if(blobBusy){
         blobGoal=pendingT;                    /* it lands where the finger left off */
@@ -530,6 +562,7 @@ function buildPlayer(video){
         seekHold=true;
         clearTimeout(holdT);
         holdT=setTimeout(function(){ seekHold=false; paintTime(); }, 320);
+        if(resumePlayback){ var p=video.play(); if(p&&p.catch) p.catch(function(){}); }
       }
     }
     pendingT=null;
@@ -794,22 +827,64 @@ function clipPlay(v){
   var p=v.play();
   if(p && p.catch) p.catch(function(){});
 }
+
+/* Cache the whole active reel film while it starts playing. The blob is kept
+   only on that same <video>, so its currentTime is preserved when waving back
+   to it and every later seek is an in-memory operation. */
+function warmFilm(v){
+  if(v._warmBlob || v._warmPromise) return;
+  var src=v.getAttribute('src');
+  if(!src || src.slice(0,5)==='blob:') return;
+  if(navigator.connection && navigator.connection.saveData) return;
+  if(!window.fetch) return;
+  var opts={credentials:'same-origin'};
+  var controller=null;
+  if(window.AbortController){
+    controller=new AbortController();
+    v._warmAbort=controller;
+    opts.signal=controller.signal;
+  }
+  v._warmSrc=src;
+  var pending=fetch(src,opts).then(function(r){
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.blob();
+  }).then(function(b){
+    if((controller && v._warmAbort!==controller) ||
+       v._warmSrc!==src || !v._in || document.hidden) return;
+    v._warmBlob=URL.createObjectURL(b);
+  });
+  v._warmPromise=pending;
+  pending.catch(function(){}).then(function(){
+    if(!controller || v._warmAbort===controller){
+      v._warmPromise=null; v._warmAbort=null; v._warmSrc=null;
+    }
+  });
+}
+function queueWarmFilm(v){
+  if(v._warmBlob || v._warmPromise || v._warmQueued) return;
+  v._warmQueued=true;
+  setTimeout(function(){
+    v._warmQueued=false;
+    if(v._in && !document.hidden) warmFilm(v);
+  }, 650);
+}
 function syncClips(){
-  var t=nowMs();
   for(var i=0;i<clipVids.length;i++){
     var v=clipVids[i], r=v.getBoundingClientRect();
     var inView = r.top < innerHeight*0.88 && r.bottom > innerHeight*0.12;
     if(!inView){
       v._held=false;                          /* leaving the screen releases the hold */
       if(v._in){ v._in=false; if(!v.paused) v.pause(); }
+      if(v._warmAbort){ v._warmAbort.abort(); v._warmAbort=null; }
+      v._warmPromise=null; v._warmSrc=null; v._warmQueued=false;
+      v.preload='metadata';
       continue;
     }
-    if(!v._in){                               /* just came on screen: rewind to 0:00 */
+    v.preload='auto';
+    if(!v._in){                               /* resume from the last playhead */
       v._in=true;
-      /* unless a finger is on the bar, or was a moment ago: a scrub outranks
-         the auto-rewind, whichever order the two happen to arrive in */
-      var fresh=v._scrubAt!=null && (t-v._scrubAt)<2500;
-      if(!v._held && !fresh){ try{ v.currentTime=0; }catch(e){} clipPlay(v); }
+      if(!v._held) clipPlay(v);
+      queueWarmFilm(v);
     } else if(!v._held && v.paused){
       clipPlay(v);
     }
