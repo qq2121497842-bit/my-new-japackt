@@ -900,26 +900,43 @@ function warmFilm(v){
 }
 function queueWarmFilm(v){
   if(v._warmBlob || v._warmPromise || v._warmQueued) return;
+  var c=navigator.connection;
+  if(phone || (c && (c.saveData || /(^|-)2g$/.test(c.effectiveType||'')))) return;
   if(v._in && !document.hidden) warmFilm(v);
 }
 function syncClips(){
+  var active=null, activeVisible=0;
   for(var i=0;i<clipVids.length;i++){
     var v=clipVids[i], r=v.getBoundingClientRect();
-    v.preload='auto';
     var inView = r.top < innerHeight*0.88 && r.bottom > innerHeight*0.12;
-    if(!inView){
-      v._held=false;                          /* leaving the screen releases the hold */
-      if(v._in){ v._in=false; if(!v.paused) v.pause(); }
-      adoptCachedReel(v);
+    var visible=Math.max(0,Math.min(r.bottom,innerHeight)-Math.max(r.top,0));
+    if(inView && visible>activeVisible){
+      active=v;
+      activeVisible=visible;
+    }
+  }
+  if(active && activeVisible<Math.min(80,active.getBoundingClientRect().height*.2)) active=null;
+
+  for(var j=0;j<clipVids.length;j++){
+    var current=clipVids[j];
+    var isActive=current===active;
+    current.preload=isActive?'auto':'metadata';
+    if(!isActive){
+      current._held=false;                    /* leaving the screen releases the hold */
+      if(current._in){
+        current._in=false;
+        if(!current.paused) current.pause();
+      }
+      adoptCachedReel(current);
       continue;
     }
-    if(!v._in){                               /* resume from the last playhead */
-      v._in=true;
-      if(!v._held) clipPlay(v);
-    } else if(!v._held && v.paused){
-      clipPlay(v);
+    if(!current._in){                         /* resume from the last playhead */
+      current._in=true;
+      if(!current._held) clipPlay(current);
+    } else if(!current._held && current.paused){
+      clipPlay(current);
     }
-    queueWarmFilm(v);
+    if(!phone) queueWarmFilm(current);
   }
 }
 clipVids.forEach(function(v){
