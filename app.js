@@ -375,7 +375,7 @@ function buildPlayer(video){
   bar.innerHTML=
     '<button class="pbtn pplay" type="button" aria-label="播放 / 暂停">'+ICO.play+'</button>'+
     '<span class="ptime pcur">0:00</span>'+
-    '<div class="pbar" role="slider" aria-label="播放进度" tabindex="0"><div class="pfill"></div><span class="pknob"></span></div>'+
+    '<div class="pbar" role="slider" aria-label="播放进度" tabindex="0"><div class="pbuffer"></div><div class="pfill"></div><span class="pknob"></span></div>'+
     '<span class="ptime pdur">0:00</span>'+
     '<button class="pbtn pmute" type="button" aria-label="声音开关">'+ICO.mute+'</button>'+
     '<div class="pvol" role="slider" aria-label="音量" tabindex="0"><div class="pvolfill"></div><span class="pknob"></span></div>';
@@ -383,10 +383,12 @@ function buildPlayer(video){
 
   var btnPlay=bar.querySelector('.pplay'), btnMute=bar.querySelector('.pmute');
   var cur=bar.querySelector('.pcur'), dur=bar.querySelector('.pdur');
-  var pbar=bar.querySelector('.pbar'), pfill=bar.querySelector('.pfill');
+  var pbar=bar.querySelector('.pbar'), pbuf=bar.querySelector('.pbuffer');
+  var pfill=bar.querySelector('.pfill');
   var pknob=bar.querySelector('.pbar .pknob');
   var vol=bar.querySelector('.pvol'), vfill=bar.querySelector('.pvolfill');
   var vknob=bar.querySelector('.pvol .pknob');
+  var bufferKey='';
 
   /* ---- the scrub state ---------------------------------------------------
      A finger on the rail paints the bar directly and tells the <video> about
@@ -487,8 +489,26 @@ function buildPlayer(video){
     if(video.getAttribute('src')!==blobUrl){ blobUrl=null; blobBusy=false; blobGoal=null; }
   });
 
+  function paintBuffer(){
+    var d=video.duration||0, ranges=video.buffered, spans=[];
+    if(d && video.currentSrc && video.currentSrc.slice(0,5)==='blob:'){
+      spans.push([0,1]);
+    } else if(d && ranges && ranges.length){
+      for(var i=0;i<ranges.length;i++){
+        var from=Math.max(0,ranges.start(i)), to=Math.min(d,ranges.end(i));
+        if(to>from) spans.push([from/d,to/d]);
+      }
+    }
+    var key=spans.map(function(s){ return s[0].toFixed(4)+':'+s[1].toFixed(4); }).join('|');
+    if(key===bufferKey) return;
+    bufferKey=key;
+    pbuf.innerHTML=spans.map(function(s){
+      return '<i style="left:'+(s[0]*100)+'%;width:'+((s[1]-s[0])*100)+'%"></i>';
+    }).join('');
+  }
   function paintTime(){
     var d=video.duration||0, t=video.currentTime||0;
+    paintBuffer();
     if(!blobBusy) dur.textContent=fmtTime(d);
     if(scrubbing || seekHold || blobBusy) return;   /* the finger owns the rail */
     var pct=d? (t/d*100) : 0;
@@ -660,7 +680,11 @@ function buildPlayer(video){
   video.addEventListener('timeupdate', paintTime);
   video.addEventListener('durationchange', paintTime);
   video.addEventListener('loadedmetadata', paintTime);
+  video.addEventListener('progress', paintBuffer);
+  video.addEventListener('progress', retrySeek);
+  video.addEventListener('loadeddata', paintBuffer);
   video.addEventListener('loadeddata', retrySeek);
+  video.addEventListener('canplay', paintBuffer);
   video.addEventListener('canplay', retrySeek);
   /* the seek finished: hand the rail back to the element */
   video.addEventListener('seeked', function(){
@@ -828,6 +852,19 @@ function clipPlay(v){
   if(p && p.catch) p.catch(function(){});
 }
 
+function adoptCachedReel(v){
+  if(!v._warmBlob || v._in || !v.paused || v._warmAdopted ||
+     v.getAttribute('src')===v._warmBlob) return;
+  v._warmAdopted=true;
+  var at=v.currentTime||0;
+  v.addEventListener('loadedmetadata', function ready(){
+    v.removeEventListener('loadedmetadata', ready);
+    try{ v.currentTime=Math.min(at, v.duration||at); }catch(err){}
+  });
+  v.src=v._warmBlob;
+  v.load();
+}
+
 /* Cache the whole active reel film while it starts playing. The blob is kept
    only on that same <video>, so its currentTime is preserved when waving back
    to it and every later seek is an in-memory operation. */
@@ -850,8 +887,9 @@ function warmFilm(v){
     return r.blob();
   }).then(function(b){
     if((controller && v._warmAbort!==controller) ||
-       v._warmSrc!==src || !v._in || document.hidden) return;
+       v._warmSrc!==src || document.hidden) return;
     v._warmBlob=URL.createObjectURL(b);
+    adoptCachedReel(v);
   });
   v._warmPromise=pending;
   pending.catch(function(){}).then(function(){
@@ -862,32 +900,26 @@ function warmFilm(v){
 }
 function queueWarmFilm(v){
   if(v._warmBlob || v._warmPromise || v._warmQueued) return;
-  v._warmQueued=true;
-  setTimeout(function(){
-    v._warmQueued=false;
-    if(v._in && !document.hidden) warmFilm(v);
-  }, 650);
+  if(v._in && !document.hidden) warmFilm(v);
 }
 function syncClips(){
   for(var i=0;i<clipVids.length;i++){
     var v=clipVids[i], r=v.getBoundingClientRect();
+    v.preload='auto';
     var inView = r.top < innerHeight*0.88 && r.bottom > innerHeight*0.12;
     if(!inView){
       v._held=false;                          /* leaving the screen releases the hold */
       if(v._in){ v._in=false; if(!v.paused) v.pause(); }
-      if(v._warmAbort){ v._warmAbort.abort(); v._warmAbort=null; }
-      v._warmPromise=null; v._warmSrc=null; v._warmQueued=false;
-      v.preload='metadata';
+      adoptCachedReel(v);
       continue;
     }
-    v.preload='auto';
     if(!v._in){                               /* resume from the last playhead */
       v._in=true;
       if(!v._held) clipPlay(v);
-      queueWarmFilm(v);
     } else if(!v._held && v.paused){
       clipPlay(v);
     }
+    queueWarmFilm(v);
   }
 }
 clipVids.forEach(function(v){

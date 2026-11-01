@@ -172,6 +172,9 @@ a{text-decoration:none;color:inherit}                          /* button labels 
    strip can grow for fingers without moving the ink */
 .pbar::before,.pvol::before{content:"";position:absolute;left:0;right:0;top:50%;height:3px;
   border-radius:2px;background:rgba(255,255,255,.16);transform:translateY(-50%)}
+.pbuffer{position:absolute;inset:0;opacity:.5;pointer-events:none}
+.pbuffer i{position:absolute;left:0;top:50%;height:3px;border-radius:2px;
+  background:#dff8ff;transform:translateY(-50%);transition:left .12s linear,width .12s linear}
 .pfill{position:absolute;left:0;top:50%;height:3px;border-radius:2px;background:#35d8ff;
   transform:translateY(-50%);pointer-events:none}
 .pvolfill{position:absolute;left:0;top:50%;height:3px;border-radius:2px;
@@ -194,7 +197,7 @@ a{text-decoration:none;color:inherit}                          /* button labels 
 @media (pointer:coarse),(max-width:700px){
   .pbar,.pvol{height:26px}
   .pknob{width:14px;height:14px;margin:-7px 0 0 -7px}
-  .pfill,.pvolfill,.pbar::before,.pvol::before{height:4px}
+  .pbuffer i,.pfill,.pvolfill,.pbar::before,.pvol::before{height:4px}
 }
 
 /* ---------- the film pop-up ---------- */
